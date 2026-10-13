@@ -1,0 +1,51 @@
+name: radiomerit
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Postgres is an existing container (service name `db`) on an external Docker network; it must contain the
+# database "radiomerit" and role "radiomerit". Set DB_NETWORK to that network's name (default: shared_default).
+x-database-url: &database-url postgresql://radiomerit:${RADIOMERIT_DB_PASSWORD}@db:5432/radiomerit
+
+services:
+  migrate:
+    build:
+      context: .
+      target: migrator
+    image: radiomerit-migrate:latest
+    environment:
+      DATABASE_URL: *database-url
+    networks: [shared]
+    restart: "no"
+    logging: *logging
+
+  radiomerit:
+    build:
+      context: .
+      target: runner
+    image: radiomerit:latest
+    hostname: radiomerit
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [shared]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    mem_limit: 512m
+    logging: *logging
+
+networks:
+  shared:
+    name: ${DB_NETWORK:-shared_default}
+    external: true

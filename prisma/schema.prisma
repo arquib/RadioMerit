@@ -1,0 +1,126 @@
+// RadioMerit: hospital allocation by merit order for the MD Radiology batch (unofficial).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoundStatus {
+  DRAFT
+  OPEN
+  LOCKED
+  ALLOCATED
+  PUBLISHED
+}
+
+model Hospital {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  vacancies Int
+  sortOrder Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  consultants Consultant[]
+  choices     Choice[]
+  allocations Allocation[]
+}
+
+/// A trainer at a hospital; `seats` trainees can be placed with them (usually 1, e.g. 2 for "HOD" at Kandy).
+model Consultant {
+  id         String   @id @default(cuid())
+  hospitalId String
+  name       String
+  seats      Int      @default(1)
+  sortOrder  Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  choices  Choice[]
+
+  @@unique([hospitalId, name])
+}
+
+model Candidate {
+  id        String   @id @default(cuid())
+  order     Int      @unique
+  indexNo   String   @unique
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  choices     Choice[]
+  allocations Allocation[]
+}
+
+model Round {
+  id          String      @id @default(cuid())
+  number      Int         @unique
+  status      RoundStatus @default(DRAFT)
+  deadline    DateTime?
+  openedAt    DateTime?
+  lockedAt    DateTime?
+  allocatedAt DateTime?
+  publishedAt DateTime?
+
+  choices     Choice[]
+  allocations Allocation[]
+}
+
+model Choice {
+  id           String   @id @default(cuid())
+  roundId      String
+  candidateId  String
+  rank         Int
+  hospitalId   String
+  /// Preferred consultant at that hospital; null = any consultant.
+  consultantId String?
+  updatedAt    DateTime @updatedAt
+
+  round      Round       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  candidate  Candidate   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  hospital   Hospital    @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  consultant Consultant? @relation(fields: [consultantId], references: [id], onDelete: SetNull)
+
+  @@unique([roundId, candidateId, rank])
+  @@unique([roundId, candidateId, hospitalId])
+}
+
+model Allocation {
+  id           String   @id @default(cuid())
+  roundId      String
+  candidateId  String
+  hospitalId   String?
+  choiceRank   Int?
+  reason       String
+  overridden   Boolean  @default(false)
+  overrideNote String?
+  createdAt    DateTime @default(now())
+
+  round     Round     @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  hospital  Hospital? @relation(fields: [hospitalId], references: [id], onDelete: Restrict)
+
+  @@unique([roundId, candidateId])
+}
+
+model Setting {
+  key   String @id
+  value Json
+}
+
+model AuditLog {
+  id     String   @id @default(cuid())
+  at     DateTime @default(now())
+  actor  String
+  action String
+  detail Json?
+
+  @@index([at])
+}
