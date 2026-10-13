@@ -69,3 +69,7 @@ The DB role has no CREATEDB, so create migrations with
 `prisma migrate deploy` (the `migrate` container does this on every `docker compose up`).
 
 Doctor names can be edited on the admin Doctors page.
+
+## License
+
+[MIT](LICENSE)
